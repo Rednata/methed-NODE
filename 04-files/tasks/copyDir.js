@@ -1,30 +1,53 @@
 import fs from 'node:fs/promises';
 
 const getIsDirectory = async (sourceDir, path) => {
-  return (await fs.stat(`${sourceDir}/${path}`)).isDirectory();
+  try {
+    return (await fs.stat(`${sourceDir}/${path}`)).isDirectory();
+  } catch (error) {
+    callback(error)
+  }
 }
 
-const createDirectory = async (targetDir, path) => {
-  await fs.mkdir(`${targetDir}/${path}`, {recursive: true})
+const createDirectory = async (targetDir, path, callback) => {
+  try {
+    await fs.mkdir(`${targetDir}/${path}`, {recursive: true});
+  } catch (error) {
+    callback(error)
+  }
 }
 
-const copy = async (sourceDir, path, targetDir) => {
-  await fs.copyFile(`${sourceDir}/${path}`, `${targetDir}/${path}`)
+const copy = async (sourceDir, path, targetDir, callback) => {
+  try {
+    await fs.copyFile(`${sourceDir}/${path}`, `${targetDir}/${path}`);
+  } catch (error) {
+    callback(error)
+  }
 }
 
-export const copyDir = (sourceDir, targetDir, callback) => {
-  fs.readdir(sourceDir)
-    .then(result => {
-      result.forEach(async path => {
-        const isDirectory = await getIsDirectory(sourceDir, path);
-        if (isDirectory) {
-          createDirectory(targetDir, path)
-          copyDir(`${sourceDir}/${path}`, `${targetDir}/${path}`, callback)
-        } else {
-          copy(sourceDir, path, targetDir)
-        }
-      })
+const getSources = async (sourceDir, callback) => {
+  try {
+    return await fs.readdir(sourceDir)
+  } catch (error) {
+    callback(error)
+  }
+}
+export const copyDir = async (sourceDir, targetDir, callback) => {
+  try {
+    const result = await getSources(sourceDir, callback)
+    result.forEach(async path => {
+      const isDirectory = await getIsDirectory(sourceDir, path, callback);
+      if (isDirectory) {
+        createDirectory(targetDir, path, callback)
+        copyDir(`${sourceDir}/${path}`, `${targetDir}/${path}`, callback)
+      } else {
+        copy(sourceDir, path, targetDir, callback)
+      }
     })
-    .catch(err => callback(err))
+  } catch (error) {
+    callback(error)
+  }
+  callback(null);
 }
 
+//  Надо ли где-то еще ставить Try/catch ???
+// callback (null) срабатывает несколько раз из-за вложенных папок. Не могу сообразить, как сделать чтобы был только один вызов
