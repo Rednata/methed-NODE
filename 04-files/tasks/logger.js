@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { appendFile, stat, copyFile, open } from 'node:fs/promises';
+import { appendFile, stat, copyFile, open, access, readFile } from 'node:fs/promises';
 import path from 'path'
 
 export class Logger extends EventEmitter {
@@ -9,14 +9,19 @@ export class Logger extends EventEmitter {
     this.maxSize = maxSize;
     this.logQuery = [];
     this.writing = false;
+    this.bakName = this.getBakName();
   }
 
+  getBakName() {
+    const pathDir = path.dirname(this.filename)
+    const fileName = path.basename(this.filename).split('.').slice(0, -1);
+    return `${pathDir}/${fileName}.bak`;
+  }
   emit(name, ...args) {
     super.emit(name, ...args)
   }
 
   log(message) {
-    // Почему сообщение должно добавляться в началоа logQueue ???
     this.logQuery.unshift(message)
     if (!this.writing) {
       this.writeLog()
@@ -25,32 +30,23 @@ export class Logger extends EventEmitter {
   }
 
   async writeLog() {
-    const log = this.logQuery.pop();
-    try {
-      await appendFile(this.filename, `${new Date().toISOString()} ${log}\n`);
-      this.emit('messageLogged', log)
-      this.checkFileSize()
-    } catch (error) {
-      console.log(`Ошибка записи в файл ${this.filename}`, error);
-    }
-
-    if (this.logQuery.length) {
-      this.writeLog()
-    } else {
-      this.writing = false;
-    }
+    this.logQuery.forEach(async log => {
+      try {
+        await appendFile(this.filename, `${new Date().toISOString()} ${log}\n`)
+        this.emit('messageLogged', log)
+        this.checkFileSize()
+        this.logQuery = this.logQuery.filter(elem => elem !== log);
+        if (!this.logQuery.length) this.writing = false;
+      } catch (error) {
+        console.log(`Ошибка записи в файл ${this.filename}`, error);
+      }
+    })
   }
 
   async checkFileSize() {
-    const size = await this.getFileSize()
-    if (size > this.maxSize) {
-      this.rotateLog()
-    }
-  }
-
-  async getFileSize() {
     try {
       const stats = await stat(this.filename);
+      if (stats.size > this.maxSize) this.rotateLog()
       return stats.size;
     } catch (error) {
       console.log(`Ошибка получения размера файла ${this.filename}`, error);
@@ -64,23 +60,18 @@ export class Logger extends EventEmitter {
    * Копируем данные из файла-лога в файл.bak
    */
   async rotateLog() {
-    const pathDir = path.dirname(this.filename)
-    const fileName = path.basename(this.filename).split('.').slice(0, -1);
-    const bakName = `${fileName}.bak`;
     let filehandle = null;
     try {
-      await copyFile(this.filename, `${pathDir}/${bakName}`);
-
+      await access(this.bakName)
+      const dataFileLog = await readFile(this.filename);
+      await appendFile(this.bakName, dataFileLog);
       filehandle = await open(this.filename, 'r+');
-      await filehandle.truncate(this.maxSize);
+      await filehandle.truncate(0);
     } catch (error) {
       console.log('error: ', error);
+      await copyFile(this.filename, this.bakName);
     } finally {
       await filehandle?.close();
     }
   }
 };
-
-
-
-

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 
-const getIsDirectory = async (sourceDir, path) => {
+const checkIsDirectory = async (sourceDir, path) => {
   try {
     return (await fs.stat(`${sourceDir}/${path}`)).isDirectory();
   } catch (error) {
@@ -31,14 +31,15 @@ const getSources = async (sourceDir, callback) => {
     callback(error)
   }
 }
-export const copyDir = async (sourceDir, targetDir, callback) => {
+
+export const copyDir = async (sourceDir, targetDir, callback, flag) => {
   try {
     const result = await getSources(sourceDir, callback)
     result.forEach(async path => {
-      const isDirectory = await getIsDirectory(sourceDir, path, callback);
+      const isDirectory = await checkIsDirectory(sourceDir, path, callback);
       if (isDirectory) {
         createDirectory(targetDir, path, callback)
-        copyDir(`${sourceDir}/${path}`, `${targetDir}/${path}`, callback)
+        copyDir(`${sourceDir}/${path}`, `${targetDir}/${path}`, callback, false)
       } else {
         copy(sourceDir, path, targetDir, callback)
       }
@@ -46,8 +47,7 @@ export const copyDir = async (sourceDir, targetDir, callback) => {
   } catch (error) {
     callback(error)
   }
-  callback(null);
+  if (flag === true) {
+    callback(null);
+  }
 }
-
-//  Надо ли где-то еще ставить Try/catch ???
-// callback (null) срабатывает несколько раз из-за вложенных папок. Не могу сообразить, как сделать чтобы был только один вызов
