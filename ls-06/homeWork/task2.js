@@ -13,13 +13,20 @@ export const copyFile = async (pathDir, sourceOut) => {
     const files = await getFiles(pathDir)
     const wStream = createWriteStream(sourceOut)
 
+    const readStream = async (file) => {
+      const stream = createReadStream(`${pathDir}/${file}`)
+      let result = '';
+      for await (const chunk of stream) {
+        result += chunk
+      }
+      wStream.write(`[=== ${file} ===]\n`);
+      wStream.write(result)
+    }
+
     files.forEach(file => {
-      const rStream = createReadStream(`${pathDir}/${file}`);
-      rStream.on('data', chunk => {
-        wStream.write(`[=== ${file} ===]\n`);
-        wStream.write(chunk)
-      })
+      readStream(file)
     })
+
   } catch (error) {
     console.log('error: ', error);
   }
